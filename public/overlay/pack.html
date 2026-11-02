@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Raid Care Package — Pack</title>
+  <link rel="stylesheet" href="/overlay/overlay.css">
+</head>
+<body class="pack-page">
+  <main class="pack-stage" aria-live="polite">
+    <div class="eyebrow"><span class="eyebrow-dot"></span> RAID CARE PACKAGE</div>
+    <h1 id="pack-title">A little love goes a long way</h1>
+    <p class="pack-target" id="pack-target">Waiting for the next raid</p>
+    <div class="pack-center">
+      <div class="gift-box gift-box-pack" aria-hidden="true">
+        <div class="gift-lid"></div><div class="gift-front"></div><div class="gift-ribbon"></div>
+        <span class="gift-spark">✦</span>
+      </div>
+      <div class="timer-wrap">
+        <span class="timer-label">PACKING WINDOW</span>
+        <strong id="countdown">READY</strong>
+        <span class="timer-unit">SECONDS</span>
+      </div>
+    </div>
+    <div class="pack-footer">
+      <span class="item-total"><strong id="item-count">0</strong> gifts packed</span>
+      <span id="pack-status">Chat, add a note with <b>!pack your message</b></span>
+    </div>
+    <section class="recent-items" id="recent-items" aria-label="Latest gifts"></section>
+  </main>
+  <script src="/overlay/pack.js" defer></script>
+</body>
+</html>
