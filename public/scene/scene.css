@@ -1,0 +1,75 @@
+* { box-sizing: border-box; }
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+body { font-family: 'Segoe UI', 'Aptos', system-ui, sans-serif; }
+.full-scene { position: relative; width: 100vw; height: 100vh; min-height: 100%; overflow: hidden; }
+.scene-art { position: absolute; inset: 0; width: 100%; height: 100%; }
+.scene-a { color: #fff1d8; background: #171626; }
+.scene-b { color: #3d5149; background: #e9f2ec; }
+.scene-brand { position: absolute; z-index: 2; top: 56px; left: 76px; display: flex; align-items: center; gap: 14px; font-size: 20px; font-weight: 750; letter-spacing: .015em; }
+.brand-mark { display: grid; width: 37px; height: 37px; place-items: center; border-radius: 13px; font-size: 23px; }
+.brand-divider { width: 1px; height: 24px; margin: 0 3px; background: currentColor; opacity: .38; }
+.brand-mode { font-size: 12px; font-weight: 800; letter-spacing: .19em; opacity: .74; }
+.brand-a { color: #ffdfb1; text-shadow: 0 2px 15px #14111f; }
+.brand-a .brand-mark { border: 1px solid rgba(255, 216, 165, .48); background: rgba(205, 117, 72, .21); color: #ffc478; }
+.brand-b { color: #3f5d50; }
+.brand-b .brand-mark { border: 1px solid rgba(90, 125, 99, .34); background: rgba(255, 255, 255, .48); color: #829975; }
+.signoff-copy, .day-copy { position: absolute; z-index: 2; top: 330px; left: 82px; width: 345px; }
+.copy-kicker { display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 850; letter-spacing: .18em; }
+.scene-a .copy-kicker { color: #ffd18c; }
+.live-dot, .sun-dot { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; }
+.live-dot { background: #ff9a65; box-shadow: 0 0 16px #ff9a65; animation: pulse 2.6s ease-in-out infinite; }
+.sun-dot { background: #d1a962; box-shadow: 0 0 12px rgba(209, 169, 98, .45); }
+.signoff-copy h1, .day-copy h1 { margin: 23px 0 18px; font-size: clamp(38px, 3.15vw, 58px); line-height: 1.03; letter-spacing: -.055em; font-weight: 760; }
+.scene-a .signoff-copy h1 { color: #fff0d9; text-shadow: 0 4px 28px rgba(7, 5, 14, .38); }
+.signoff-copy p { margin: 0; color: #eab47f; font-size: 23px; line-height: 1.35; font-weight: 650; }
+.copy-rule { display: block; width: 72px; height: 2px; margin: 27px 0 15px; border-radius: 2px; }
+.scene-a .copy-rule { background: #d9875d; }
+.copy-small { color: #cab3a0; font-size: 15px; letter-spacing: .035em; }
+.camera-placeholder { position: absolute; z-index: 2; top: 116px; right: 78px; width: min(370px, 21vw); aspect-ratio: 16 / 9; padding: 12px; border: 2px solid rgba(239, 183, 121, .78); border-radius: 20px; background: rgba(25, 20, 32, .82); box-shadow: 0 16px 50px rgba(10, 7, 17, .32), inset 0 0 0 5px rgba(217, 135, 93, .1); }
+.camera-topline { position: absolute; top: 17px; right: 19px; left: 19px; display: flex; justify-content: space-between; color: #e7b98e; font-size: 10px; font-weight: 800; letter-spacing: .19em; }
+.camera-spark { color: #ffd18c; font-size: 15px; }
+.camera-inner { display: flex; height: 100%; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding-top: 17px; border: 1px dashed rgba(238, 194, 149, .43); border-radius: 11px; color: #d5bfad; text-align: center; }
+.camera-inner svg { width: 34px; height: 34px; margin-bottom: 3px; fill: #d6a77b; opacity: .72; }
+.camera-inner strong { color: #f5d8b5; font-size: 11px; letter-spacing: .16em; }
+.camera-inner span { font-size: 10px; opacity: .76; }
+.scene-caption { position: absolute; z-index: 2; bottom: 38px; font-size: 10px; font-weight: 800; letter-spacing: .2em; }
+.caption-a { left: 82px; color: rgba(242, 201, 158, .62); }
+.caption-b { left: 82px; color: rgba(72, 102, 83, .66); }
+.scene-orb { position: absolute; z-index: 1; right: 11%; bottom: 16%; width: 12px; height: 12px; border-radius: 50%; background: #f7c580; opacity: .45; box-shadow: 0 0 0 9px rgba(247, 197, 128, .08), 0 0 36px 12px rgba(247, 197, 128, .22); animation: drift 8s ease-in-out infinite alternate; }
+.twinkle { animation: twinkle 5s ease-in-out infinite; }
+.t1 { animation-delay: -1.2s; }.t2 { animation-delay: -3.1s; }.t3 { animation-delay: -4.4s; }
+.day-copy { top: 358px; width: 330px; }
+.day-copy .copy-kicker { color: #718a71; font-size: 10px; letter-spacing: .15em; }
+.day-copy h1 { margin-top: 21px; color: #3e594b; font-size: clamp(37px, 3vw, 55px); text-shadow: 0 2px 0 rgba(255,255,255,.42); }
+.day-copy .copy-rule { background: #b98d69; }
+.day-copy p { margin: 0; color: #758676; font-size: 19px; line-height: 1.5; font-weight: 550; }
+.plant-note { position: absolute; z-index: 2; right: 70px; bottom: 95px; display: flex; align-items: center; gap: 12px; color: #536f5d; font-size: 13px; line-height: 1.5; font-weight: 650; }
+.plant-line { width: 34px; height: 1px; background: #a68161; }
+.unbox-layer { position: fixed; z-index: 10; inset: 0; width: 100vw; height: 100vh; border: 0; background: transparent; pointer-events: none; }
+
+@keyframes pulse { 0%, 100% { opacity: .72; box-shadow: 0 0 10px #ff9a65; } 50% { opacity: 1; box-shadow: 0 0 20px #ff9a65; } }
+@keyframes twinkle { 0%, 100% { opacity: .23; transform: scale(.8); } 50% { opacity: .95; transform: scale(1.25); } }
+@keyframes drift { from { transform: translateY(0); } to { transform: translateY(-18px); } }
+
+@media (max-width: 1250px) {
+  .scene-brand { top: 28px; left: 28px; }
+  .signoff-copy, .day-copy { top: auto; bottom: 78px; left: 32px; width: 290px; }
+  .signoff-copy h1, .day-copy h1 { font-size: 38px; }
+  .camera-placeholder { top: 82px; right: 30px; width: min(300px, 29vw); }
+  .scene-caption, .caption-a, .caption-b { left: 32px; }
+  .plant-note { right: 30px; bottom: 58px; }
+}
+@media (max-width: 700px) {
+  .brand-mode, .brand-divider { display: none; }
+  .signoff-copy, .day-copy { bottom: 45px; left: 20px; width: 220px; }
+  .signoff-copy h1, .day-copy h1 { font-size: 31px; }
+  .signoff-copy p { font-size: 17px; }
+  .copy-kicker { font-size: 9px; }
+  .camera-placeholder { top: 83px; right: 18px; width: 44vw; padding: 7px; border-radius: 12px; }
+  .camera-topline { top: 10px; right: 12px; left: 12px; font-size: 7px; }
+  .camera-inner { gap: 3px; }
+  .camera-inner svg { width: 23px; height: 23px; }
+  .camera-inner strong, .camera-inner span { font-size: 7px; }
+  .plant-note { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }

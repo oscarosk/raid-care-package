@@ -27,12 +27,20 @@ The `channel.raid` EventSub subscription does not require an authorization scope
 
 ## OBS setup
 
-Add Browser Sources to OBS and set each source to 1920 × 1080:
+### Streamer A — Browser Sources
 
-- On A's stream: `http://localhost:3000/overlay/pack`
-- On B's stream: `http://localhost:3000/overlay/unbox`
+Add two Browser Sources at 1920 × 1080 in this order, with the second above the first:
 
-The pages have transparent backgrounds and connect to the local server over WebSocket. Twitch emotes are displayed using Twitch's static emote image CDN.
+1. Background: `http://localhost:3000/scene/a`
+2. Packing overlay: `http://localhost:3000/overlay/pack`
+
+The scene includes a webcam-frame placeholder. Place A's camera source above the background if you want the camera visible inside that frame.
+
+### Streamer B — Firefox Window Capture
+
+Open `http://localhost:3000/scene/b` in Firefox and press **F11**. In OBS, capture that Firefox window with Window Capture. The page includes the unbox overlay on top of the daytime scene, so B does not need a Browser Source.
+
+Both scenes use original inline SVG/CSS artwork and system fonts; they load no background images. The overlays have transparent backgrounds and connect to the local server over WebSocket. Twitch emotes are displayed using Twitch's static emote image CDN.
 
 Overlay clients reconnect automatically if the local WebSocket disconnects. The server logs which overlay page connects and disconnects, how many clients receive each event, and how many acknowledge rendering it.
 

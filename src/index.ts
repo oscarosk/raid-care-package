@@ -161,6 +161,7 @@ function escapeHtml(value: string): string {
 
 const app = express();
 app.use('/overlay', express.static(path.resolve('public/overlay'), { extensions: ['html'] }));
+app.use('/scene', express.static(path.resolve('public/scene'), { extensions: ['html'] }));
 app.get('/', (_request, response) => {
   const accountStatus = (['A', 'B'] as const).map(account => {
     const token = tokens[account];
