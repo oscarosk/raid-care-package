@@ -43,6 +43,12 @@ body { font-family: 'Segoe UI', 'Aptos', system-ui, sans-serif; }
 .day-copy h1 { margin-top: 21px; color: #3e594b; font-size: clamp(37px, 3vw, 55px); text-shadow: 0 2px 0 rgba(255,255,255,.42); }
 .day-copy .copy-rule { background: #b98d69; }
 .day-copy p { margin: 0; color: #758676; font-size: 19px; line-height: 1.5; font-weight: 550; }
+.camera-placeholder-b { top: 116px; right: 72px; width: min(330px, 19vw); border-color: rgba(104, 137, 110, .72); background: rgba(242, 247, 237, .88); box-shadow: 0 16px 50px rgba(58, 82, 65, .16), inset 0 0 0 5px rgba(117, 151, 119, .09); }
+.camera-placeholder-b .camera-topline { color: #66806d; }
+.camera-placeholder-b .camera-spark { color: #b98d69; }
+.camera-placeholder-b .camera-inner { border-color: rgba(104, 137, 110, .42); color: #6f8172; }
+.camera-placeholder-b .camera-inner svg { fill: #7e9a84; }
+.camera-placeholder-b .camera-inner strong { color: #506a57; }
 .plant-note { position: absolute; z-index: 2; right: 70px; bottom: 95px; display: flex; align-items: center; gap: 12px; color: #536f5d; font-size: 13px; line-height: 1.5; font-weight: 650; }
 .plant-line { width: 34px; height: 1px; background: #a68161; }
 .unbox-layer { position: fixed; z-index: 10; inset: 0; width: 100vw; height: 100vh; border: 0; background: transparent; pointer-events: none; }

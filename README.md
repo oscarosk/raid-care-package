@@ -38,7 +38,7 @@ The scene includes a webcam-frame placeholder. Place A's camera source above the
 
 ### Streamer B — Firefox Window Capture
 
-Open `http://localhost:3000/scene/b` in Firefox and press **F11**. In OBS, capture that Firefox window with Window Capture. The page includes the unbox overlay on top of the daytime scene, so B does not need a Browser Source.
+Open `http://localhost:3000/scene/b` in Firefox and press **F11**. In OBS, capture that Firefox window with Window Capture. The page includes a webcam-frame placeholder and the unbox overlay on top of the daytime scene, so B does not need a Browser Source. The embedded overlay is transparent and hides its idle heading until a raid arrives.
 
 Both scenes use original inline SVG/CSS artwork and system fonts; they load no background images. The overlays have transparent backgrounds and connect to the local server over WebSocket. Twitch emotes are displayed using Twitch's static emote image CDN.
 
