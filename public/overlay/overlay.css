@@ -28,13 +28,27 @@ h1 { margin: 18px 0 0; font: 700 clamp(36px, 5vw, 64px)/1.05 'Segoe UI', 'Aptos 
 .gift-ribbon { position: absolute; top: 0; left: 82px; z-index: 4; width: 42px; height: 27px; border: 5px solid var(--gold); border-radius: 22px 22px 5px 22px; transform: rotate(-25deg); }
 .gift-ribbon::after { content: ''; position: absolute; left: 18px; top: 0; width: 42px; height: 27px; border: 5px solid var(--gold); border-radius: 22px 22px 22px 5px; transform: rotate(48deg); }
 .gift-spark { position: absolute; top: 57px; left: 88px; z-index: 5; color: #fff1bd; font-size: 30px; text-shadow: 0 0 16px white; }
+.gift-landings { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
+.landing-gift { position: absolute; top: -76px; left: 50%; display: grid; justify-items: center; gap: 4px; opacity: 0; transform: translateX(-50%); animation: gift-land 1.05s cubic-bezier(.2,.75,.25,1) both; }
+.landing-gift strong { max-width: 220px; overflow: hidden; padding: 5px 10px; border: 1px solid rgba(255,235,194,.65); border-radius: 999px; background: rgba(27,22,48,.96); color: #fff8e7; font-size: 14px; line-height: 1; text-overflow: ellipsis; white-space: nowrap; box-shadow: 0 4px 14px rgba(8,5,20,.28); }
+.landing-crate { position: relative; width: 29px; height: 23px; border: 2px solid #fff0c3; border-radius: 5px; background: linear-gradient(135deg,#f4c967,#d99159); box-shadow: 0 0 18px rgba(255,215,123,.75); }
+.landing-crate::before { position: absolute; top: 5px; bottom: 0; left: 10px; width: 5px; content: ''; background: #fff1bd; }
+.landing-crate::after { position: absolute; top: -5px; left: -3px; width: 31px; height: 6px; content: ''; border: 1px solid rgba(255,255,255,.8); border-radius: 4px; background: #f8d982; }
+.gift-box-pack.is-pop { animation: pack-box-pop .42s cubic-bezier(.2,1.35,.45,1) both; }
 .timer-wrap { display: flex; flex-direction: column; align-items: center; min-width: 170px; }
 .timer-label, .timer-unit { color: var(--lavender); font-size: 14px; font-weight: 800; letter-spacing: .2em; }
 #countdown { margin: 2px 0; color: #fff; font: 700 100px/.95 'Segoe UI', 'Aptos Display', system-ui, sans-serif; font-variant-numeric: tabular-nums; text-shadow: 0 5px 34px rgba(169,138,255,.65); }
 .pack-footer { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 17px 24px; border: 1px solid rgba(226, 211, 255, .36); border-radius: 18px; background: var(--night); box-shadow: 0 14px 45px rgba(12, 9, 29, .35); color: var(--muted); font-size: 17px; text-align: left; }
 .item-total { flex: 0 0 auto; color: var(--cream); font-weight: 700; }
 .item-total strong { color: var(--gold); font-size: 23px; }
+.item-total strong.count-pop { animation: count-pop .4s cubic-bezier(.2,1.3,.4,1) both; }
 .pack-footer b { color: var(--gold); }
+#pack-status { transition: color .25s ease, font-size .25s ease; }
+.pack-stage.is-closing .timer-wrap { filter: drop-shadow(0 0 22px rgba(255,126,124,.55)); }
+.pack-stage.is-closing #countdown { color: #ffe1ab; font-size: clamp(118px, 9vw, 148px); animation: countdown-pulse .62s ease-in-out infinite alternate; text-shadow: 0 4px 42px rgba(255,139,111,.9); }
+.pack-stage.is-closing .timer-label { color: #ffd08d; }
+.pack-stage.is-sealed .pack-footer { border-color: rgba(255,215,123,.82); box-shadow: 0 0 35px rgba(255,215,123,.24), 0 14px 45px rgba(12,9,29,.35); animation: seal-pop .55s cubic-bezier(.16,1,.3,1) both; }
+.pack-stage.is-sealed #pack-status { color: var(--gold); font-size: 20px; font-weight: 800; }
 .recent-items { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
 .pack-item, .reveal-item { display: flex; align-items: center; gap: 14px; min-width: 0; padding: 13px 18px; border: 1px solid rgba(231, 217, 255, .28); border-radius: 15px; background: var(--night); box-shadow: 0 9px 25px rgba(10, 8, 25, .28); text-align: left; }
 .pack-item { animation: fly-in .6s cubic-bezier(.16,1,.3,1) both; }
@@ -92,6 +106,11 @@ h1 { margin: 18px 0 0; font: 700 clamp(36px, 5vw, 64px)/1.05 'Segoe UI', 'Aptos 
 .unbox-stage.is-fading { animation: scene-fade-out 1s ease forwards; }
 
 @keyframes fly-in { from { opacity: 0; transform: translate(-100px, 22px) rotate(-3deg) scale(.92); } to { opacity: 1; transform: translate(0) rotate(0) scale(1); } }
+@keyframes gift-land { 0% { opacity: 0; transform: translate(-50%,-30px) scale(.55) rotate(-12deg); } 18% { opacity: 1; transform: translate(-50%,-30px) scale(1.12) rotate(7deg); } 68% { opacity: 1; transform: translate(-50%,98px) scale(.92) rotate(-4deg); } 83% { opacity: .9; transform: translate(-50%,88px) scale(1.2) rotate(0); } 100% { opacity: 0; transform: translate(-50%,100px) scale(.35) rotate(0); } }
+@keyframes pack-box-pop { 0% { transform: scale(1); } 48% { transform: scale(1.08) rotate(-2deg); } 100% { transform: scale(1) rotate(0); } }
+@keyframes count-pop { 0% { transform: scale(1); } 45% { transform: scale(1.45); } 100% { transform: scale(1); } }
+@keyframes countdown-pulse { from { transform: scale(1); } to { transform: scale(1.11); } }
+@keyframes seal-pop { 0% { opacity: .5; transform: translateY(8px) scale(.98); } 70% { transform: translateY(-2px) scale(1.015); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes box-drop { 0% { opacity: 0; transform: translateY(-700px) rotate(-9deg) scale(.9); } 72% { opacity: 1; transform: translateY(28px) rotate(3deg) scale(1.02); } 100% { opacity: 1; transform: translateY(0) rotate(0) scale(1); } }
 @keyframes box-anticipation-shake { 0%,100% { transform: translateX(0) rotate(0); } 15% { transform: translateX(-3px) rotate(-1deg); } 30% { transform: translateX(4px) rotate(1.2deg); } 45% { transform: translateX(-7px) rotate(-2deg); } 60% { transform: translateX(9px) rotate(2.5deg); } 75% { transform: translateX(-13px) rotate(-3.5deg); } 88% { transform: translateX(11px) rotate(3deg); } }
 @keyframes box-glow { 0%,100% { opacity: 0; transform: scale(.65); } 30% { opacity: .6; transform: scale(.95); } 68% { opacity: .82; transform: scale(1.12); } }

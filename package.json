@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "demo": "npm run build && node dist/index.js --demo",
+    "test": "npm run build && node --test tests/*.test.mjs"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

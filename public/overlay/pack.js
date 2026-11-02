@@ -1,14 +1,20 @@
 (() => {
+  const stage = document.querySelector('.pack-stage');
   const title = document.querySelector('#pack-title');
   const target = document.querySelector('#pack-target');
   const countdown = document.querySelector('#countdown');
   const itemCount = document.querySelector('#item-count');
+  const itemCountLabel = document.querySelector('#item-count-label');
   const status = document.querySelector('#pack-status');
   const recentItems = document.querySelector('#recent-items');
+  const giftBox = document.querySelector('.gift-box-pack');
+  const giftLandings = document.querySelector('#gift-landings');
   let endsAt = 0;
   let total = 0;
   let socket;
   let retryTimer;
+  let sealedTimer;
+  let boxPopTimer;
   let retryDelay = 1000;
 
   function renderMessage(container, item) {
@@ -48,14 +54,43 @@
     card.append(avatar, copy);
     recentItems.prepend(card);
     while (recentItems.children.length > 4) recentItems.lastElementChild.remove();
+    landGift(String(item.user ?? 'viewer'));
+    itemCount.classList.remove('count-pop');
+    void itemCount.offsetWidth;
+    itemCount.classList.add('count-pop');
+  }
+
+  function landGift(user) {
+    const landing = document.createElement('span');
+    landing.className = 'landing-gift';
+    landing.setAttribute('aria-hidden', 'true');
+    const crate = document.createElement('span');
+    crate.className = 'landing-crate';
+    const sender = document.createElement('strong');
+    sender.textContent = user;
+    landing.append(crate, sender);
+    giftLandings.append(landing);
+    landing.addEventListener('animationend', () => landing.remove(), { once: true });
+
+    giftBox.classList.remove('is-pop');
+    void giftBox.offsetWidth;
+    giftBox.classList.add('is-pop');
+    clearTimeout(boxPopTimer);
+    boxPopTimer = setTimeout(() => giftBox.classList.remove('is-pop'), 450);
   }
 
   function handle(message) {
     if (message.kind === 'pack_started') {
+      clearTimeout(sealedTimer);
+      stage.classList.remove('is-sealed', 'is-closing');
       endsAt = Number(message.endsAt);
       total = 0;
       recentItems.replaceChildren();
+      giftLandings.replaceChildren();
+      giftBox.classList.remove('is-pop');
+      clearTimeout(boxPopTimer);
       itemCount.textContent = '0';
+      itemCountLabel.textContent = 'gifts packed';
       title.textContent = 'A little love goes a long way';
       target.textContent = `Packing for ${message.target}`;
       status.innerHTML = 'Chat, add a note with <b>!pack your message</b>';
@@ -64,6 +99,7 @@
     if (message.kind === 'pack_item') {
       total = Number(message.itemCount ?? total + 1);
       itemCount.textContent = String(total);
+      itemCountLabel.textContent = total === 1 ? 'gift packed' : 'gifts packed';
       addItem(message.item ?? {});
       return true;
     }
@@ -73,7 +109,14 @@
     }
     if (message.kind === 'pack_ended') {
       endsAt = 0;
-      status.textContent = 'Package packed — waiting for the raid';
+      stage.classList.remove('is-closing');
+      stage.classList.add('is-sealed');
+      status.textContent = `Package sealed, heading to ${String(message.target ?? target.textContent.replace(/^Packing for /, ''))}!`;
+      clearTimeout(sealedTimer);
+      sealedTimer = setTimeout(() => {
+        stage.classList.remove('is-sealed');
+        status.textContent = 'Package packed — waiting for the raid';
+      }, 5000);
       return true;
     }
     return false;
@@ -109,7 +152,9 @@
   }
 
   setInterval(() => {
-    countdown.textContent = endsAt ? String(Math.max(0, Math.ceil((endsAt - Date.now()) / 1000))) : 'READY';
+    const remaining = endsAt ? Math.max(0, Math.ceil((endsAt - Date.now()) / 1000)) : 0;
+    countdown.textContent = endsAt ? String(remaining) : 'READY';
+    stage.classList.toggle('is-closing', Boolean(endsAt && remaining <= 10 && remaining > 0));
   }, 200);
   connect();
 })();

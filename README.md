@@ -1,61 +1,103 @@
 # Raid Care Package
 
-Raid Care Package is a TwitchCon hackathon demo: when streamer A raids streamer B, A's chat packs a care package during the countdown, and it is unboxed live on B's stream.
+**A's chat fills a care package during a raid countdown, then B unboxes those messages live.** It gives the raiding community a fun, visible way to welcome viewers into a new channel.
 
-## Current build
+## How it works
 
-OAuth, EventSub, packing, raid arrival, and both overlays are implemented. Connect account A (raider) and account B (receiving broadcaster) at `http://localhost:3000`. The server uses one EventSub WebSocket per account and logs tagged notifications in the terminal.
+1. Streamer A (the raider) or one of A's moderators opens a 90-second pack window with `!carepack <target>`.
+2. Chat adds one note each with `!pack <message>`. Messages are limited to 100 characters, and Twitch emotes are carried into the package.
+3. The server asks Twitch to start the raid from A to the target. If Twitch rejects the request, the pack window stays open and A is asked to start the raid manually.
+4. When streamer B receives A's raid, B's scene unboxes the saved messages and welcomes the incoming community. Raids without a matching package still get a general welcome.
 
-## Setup
+## Quick start: demo mode
 
-1. Create a Twitch application and set its OAuth Redirect URL to `http://localhost:3000/auth/callback`.
-2. Copy `.env.example` to `.env` and set `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET`.
-3. Run `npm install`, then `npm run dev`. For a production build, use `npm run build` and `npm start`.
-4. Visit `http://localhost:3000` and connect account A and account B. Each button must be authorized by the corresponding broadcaster.
+Demo mode needs no `.env`, Twitch login, or Twitch account. It starts the server, then repeatedly simulates the packing countdown, sample chat messages, and raid arrival.
 
-Tokens are saved in local `tokens.json`, which is gitignored. Access tokens are validated and refreshed automatically; Twitch may rotate the refresh token, and the latest token pair is saved.
+```sh
+npm install
+npm run demo
+```
 
-## OAuth scopes
+The server prints these pages when it starts:
 
-The authorization request asks for:
+- Packing overlay: `http://localhost:3000/overlay/pack`
+- Unbox overlay: `http://localhost:3000/overlay/unbox`
+- Complete Stream B scene: `http://localhost:3000/scene/b`
 
-- `channel:manage:raids` — start a raid on behalf of streamer A.
-- `user:read:chat` — receive chat messages for the authorized account through EventSub.
-- `user:write:chat` — send the occasional packing confirmation and manual-raid fallback as account A.
+Open `/scene/b` to see the daytime scene and unboxing together. Open `/overlay/pack` separately to watch the package fill. The loop repeats automatically.
 
-The `channel.raid` EventSub subscription does not require an authorization scope. Chat subscriptions use the user access token for the broadcaster whose chat is being read.
+If another local app already uses port 3000, set `DEMO_PORT` to another free port (for example, `$env:DEMO_PORT=3001` in PowerShell or `DEMO_PORT=3001` in a POSIX shell); the demo prints URLs for the selected port.
 
-## OBS setup
+## Full Twitch setup
 
-### Streamer A — Browser Sources
+### Register the Twitch application
 
-Add two Browser Sources at 1920 × 1080 in this order, with the second above the first:
+1. Create an application in the [Twitch Developer Console](https://dev.twitch.tv/console/apps).
+2. Set its OAuth Redirect URL to `http://localhost:3000/auth/callback` and choose the appropriate application category.
+3. Copy `.env.example` to `.env` and fill in the registered application's client ID and client secret:
 
-1. Background: `http://localhost:3000/scene/a`
-2. Packing overlay: `http://localhost:3000/overlay/pack`
+   ```dotenv
+   TWITCH_CLIENT_ID=your_client_id
+   TWITCH_CLIENT_SECRET=your_client_secret
+   ```
 
-The scene includes a webcam-frame placeholder. Place A's camera source above the background if you want the camera visible inside that frame.
+4. Build and start the local server:
 
-### Streamer B — Firefox Window Capture
+   ```sh
+   npm install
+   npm run build
+   npm start
+   ```
 
-Open `http://localhost:3000/scene/b` in Firefox and press **F11**. In OBS, capture that Firefox window with Window Capture. The page includes a webcam-frame placeholder and the unbox overlay on top of the daytime scene, so B does not need a Browser Source. The embedded overlay is transparent and hides its idle heading until a raid arrives.
+5. Visit `http://localhost:3000`. Connect account A as the raiding broadcaster and account B as the receiving broadcaster. Each account authorizes separately.
 
-Both scenes use original inline SVG/CSS artwork and system fonts; they load no background images. The overlays have transparent backgrounds and connect to the local server over WebSocket. Twitch emotes are displayed using Twitch's static emote image CDN.
+OAuth requests these scopes:
 
-Overlay clients reconnect automatically if the local WebSocket disconnects. The server logs which overlay page connects and disconnects, how many clients receive each event, and how many acknowledge rendering it.
+- `channel:manage:raids` — A can start a raid.
+- `user:read:chat` — read each broadcaster's chat through EventSub.
+- `user:write:chat` — A can send occasional packing confirmations and manual-raid instructions.
 
-## Chat commands
+Tokens are stored in local `tokens.json`, refreshed when needed, and excluded from Git. Keep `.env` private too; it is also gitignored.
 
-- A's broadcaster or a moderator starts a window with `!carepack <target>`. This opens a 90-second packing window and requests a Twitch raid. If Twitch rejects the raid request, the window stays open and the bot asks A to start the raid manually.
-- Viewers add one item each with `!pack <message>`. Messages are limited to 100 characters. The bot only posts an occasional confirmation to avoid chat spam.
+### OBS setup
 
-The package appears on B's unbox overlay when A raids B. Raids without a matching package show a general welcome with the raider name and viewer count.
+Set both streams to 1920 × 1080.
 
-## Local overlay debugging
+**Streamer A:** add these Browser Sources in order, with the packing overlay above the scene background:
 
-- `GET http://localhost:3000/debug/demo-pack` starts a 90-second pack countdown and adds three sample items.
-- `GET http://localhost:3000/debug/replay-unbox` replays the last package arrival in the current server session.
+1. `http://localhost:3000/scene/a`
+2. `http://localhost:3000/overlay/pack`
 
-## Demo mode
+Place A's webcam source above the background if you want the camera inside its frame.
 
-Demo mode will be documented here when implemented.
+**Streamer B:** open `http://localhost:3000/scene/b` in Firefox, press **F11**, then capture the Firefox window in OBS with Window Capture. The page combines B's daytime scene with the transparent unbox overlay and webcam-frame placeholder.
+
+Two OBS instances on one PC may fail to render Browser Sources in the second instance. In that case, use Window Capture of the fullscreen Firefox `/scene/b` page for B.
+
+### Local replay helpers
+
+- `GET http://localhost:3000/debug/demo-pack` starts a local pack countdown and inserts three sample items.
+- `GET http://localhost:3000/debug/replay-unbox` replays the last package received in this server session, or a six-item sample if there has not been a package yet.
+
+## Architecture
+
+- One Node.js, TypeScript, and Express server handles both broadcaster accounts and serves the overlay pages.
+- EventSub uses a separate WebSocket connection and that broadcaster's user token for each account. A listens for `channel.chat.message`; B listens for `channel.chat.message` and `channel.raid` addressed to B.
+- A's `!carepack` command opens the pack window and calls Twitch's Start a raid API. Chat messages and raid notifications are matched against the active package in memory.
+- The server sends pack and arrival events to plain HTML/CSS/JavaScript overlays over a local `ws` WebSocket. Overlay pages reconnect if that connection drops.
+- Scenes and animations use original HTML, CSS, and SVG artwork with system fonts. Emote images are rendered from Twitch emote IDs in chat messages.
+- Demo mode uses the same local overlay WebSocket events but does not load tokens, start EventSub, or call Twitch APIs.
+- The project uses no paid APIs or hosted services.
+
+## Development checks
+
+```sh
+npm run build
+npm test
+```
+
+The tests cover one item per user, the 100-character limit, emote parsing, broadcaster/mod authorization, and raid-to-package matching.
+
+## How I built it with Codex
+
+[Placeholder: I will fill in how I used Codex to design, build, and debug Raid Care Package.]

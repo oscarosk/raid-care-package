@@ -5,15 +5,17 @@ import { createServer } from 'node:http';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import WebSocket, { WebSocketServer } from 'ws';
+import { addPackageItem, authorizedCarepackTarget, createPackageItem, parsePackCommand, raidMatchesPackage } from './packing.js';
 
-const PORT = 3000;
+const DEMO_MODE = process.argv.includes('--demo');
+const PORT = DEMO_MODE ? Number(process.env.DEMO_PORT ?? 3000) : 3000;
 const REDIRECT_URI = `http://localhost:${PORT}/auth/callback`;
 const TOKEN_FILE = path.resolve('tokens.json');
 const EVENTSUB_URL = 'wss://eventsub.wss.twitch.tv/ws';
 const SCOPES = ['channel:manage:raids', 'user:read:chat', 'user:write:chat'];
 const clientId = process.env.TWITCH_CLIENT_ID;
 const clientSecret = process.env.TWITCH_CLIENT_SECRET;
-if (!clientId || !clientSecret) throw new Error('Set TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET in .env');
+if (!DEMO_MODE && (!clientId || !clientSecret)) throw new Error('Set TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET in .env');
 
 type Account = 'A' | 'B';
 type TwitchToken = {
@@ -26,8 +28,7 @@ type TwitchToken = {
   display_name: string;
 };
 type TokenStore = Partial<Record<Account, TwitchToken>>;
-type PackageEmote = { id: string; name: string; begin: number; end: number };
-type PackageItem = { user: string; text: string; emotes: PackageEmote[] };
+type PackageItem = import('./packing.js').PackageItem;
 type CarePackage = {
   id: string;
   sourceUserId: string;
@@ -172,6 +173,7 @@ app.get('/', (_request, response) => {
 });
 
 app.get('/auth/start/:account', (request, response) => {
+  if (DEMO_MODE) return response.status(404).send('Twitch OAuth is disabled in demo mode.');
   const account = request.params.account.toUpperCase();
   if (account !== 'A' && account !== 'B') return response.status(404).send('Account must be A or B.');
   const state = randomBytes(32).toString('hex');
@@ -185,6 +187,7 @@ app.get('/auth/start/:account', (request, response) => {
 });
 
 app.get('/auth/callback', async (request, response) => {
+  if (DEMO_MODE) return response.status(404).send('Twitch OAuth is disabled in demo mode.');
   const state = String(request.query.state ?? '');
   const pending = pendingStates.get(state);
   pendingStates.delete(state);
@@ -366,27 +369,9 @@ function armPackWindowEnd(pack: CarePackage): void {
 function collectPackItem(event: Record<string, any>, text: string, textStart: number): void {
   const pack = activePacking;
   if (!pack?.accepting || Date.now() >= pack.endsAt) return;
-  const userId = String(event.chatter_user_id ?? '');
-  const user = String(event.chatter_user_name ?? 'viewer');
-  const message = event.message as { text?: string; fragments?: Array<{ type?: string; text?: string; emote?: { id?: string } | null }> } | undefined;
-  text = text.trim();
-  const length = Array.from(text).length;
-  if (!userId || !text || length > 100 || pack.users.has(userId)) return;
-
-  let offset = 0;
-  const emotes: PackageEmote[] = [];
-  for (const fragment of message?.fragments ?? []) {
-    const fragmentText = fragment.text ?? '';
-    const startInText = offset - textStart;
-    const endInText = startInText + fragmentText.length;
-    if (fragment.type === 'emote' && fragment.emote?.id && startInText >= 0 && endInText <= text.length) {
-      emotes.push({ id: fragment.emote.id, name: fragmentText, begin: startInText, end: endInText });
-    }
-    offset += fragmentText.length;
-  }
-  const item: PackageItem = { user, text, emotes };
-  pack.users.add(userId);
-  pack.items.push(item);
+  const parsed = createPackageItem(event, text, textStart);
+  if (!parsed || !addPackageItem(pack, parsed.userId, parsed.item)) return;
+  const { item } = parsed;
   sendOverlay('pack', { kind: 'pack_item', item, itemCount: pack.items.length });
   itemsSinceConfirmation++;
   if (itemsSinceConfirmation === 20) {
@@ -399,19 +384,18 @@ async function handleChatNotification(account: Account, event: Record<string, an
   if (account !== 'A') return;
   const rawText = String(event.message?.text ?? '');
   const text = rawText.trim();
-  const carepack = /^!carepack\s+(.+)$/i.exec(text);
-  if (carepack) {
-    const isBroadcaster = Boolean(event.chatter_is_broadcaster)
+  const isBroadcaster = Boolean(event.chatter_is_broadcaster)
       || event.badges?.some((badge: { set_id?: string }) => badge.set_id === 'broadcaster');
-    const isModerator = Boolean(event.chatter_is_moderator)
+  const isModerator = Boolean(event.chatter_is_moderator)
       || event.badges?.some((badge: { set_id?: string }) => badge.set_id === 'moderator');
-    if (isBroadcaster || isModerator) openCarePackage(carepack[1]);
+  const carepackTarget = authorizedCarepackTarget(text, isBroadcaster, isModerator);
+  if (carepackTarget) {
+    openCarePackage(carepackTarget);
     return;
   }
-  const packItem = /^!pack\s+(.+)$/i.exec(text);
+  const packItem = parsePackCommand(rawText);
   if (packItem) {
-    const contentStart = rawText.indexOf(text) + packItem.index + packItem[0].lastIndexOf(packItem[1]);
-    collectPackItem(event, packItem[1], contentStart);
+    collectPackItem(event, packItem.text, packItem.textStart);
   }
 }
 
@@ -423,11 +407,11 @@ function handleRaidNotification(event: Record<string, any>): void {
   const viewers = Number(event.viewers ?? 0);
   const accountA = tokens.A;
   const accountB = tokens.B;
-  const pack = Array.from(carePackages.values()).find(candidate =>
-    Boolean(accountA && candidate.sourceUserId === accountA.user_id && raiderId === accountA.user_id)
-    && Boolean(accountB && destinationId === accountB.user_id)
-    && (candidate.targetId === destinationId || candidate.targetLogin === destinationLogin),
-  );
+  const pack = Array.from(carePackages.values()).find(candidate => raidMatchesPackage(candidate, {
+    fromBroadcasterId: raiderId,
+    toBroadcasterId: destinationId,
+    toBroadcasterLogin: destinationLogin,
+  }, accountA?.user_id, accountB?.user_id));
 
   if (pack) {
     pack.accepting = false;
@@ -497,6 +481,62 @@ app.get('/debug/demo-pack', (_request, response) => {
   }
   response.json({ ok: true, itemCount: demoItems.length, countdownSeconds: 90 });
 });
+
+async function runDemoLoop(): Promise<void> {
+  const items: PackageItem[] = [
+    { user: 'MapleMoth', text: 'A pocket-sized good luck for the road!', emotes: [] },
+    { user: 'Cloudberry', text: 'PogChamp energy for your next adventure', emotes: [{ id: '88', name: 'PogChamp', begin: 0, end: 8 }] },
+    { user: 'PixelFern', text: 'You made this little corner of Twitch feel like home.', emotes: [] },
+    { user: 'TeaAndPixels', text: 'A warm welcome from all of us!', emotes: [] },
+    { user: 'StarryNights', text: 'Kappa', emotes: [{ id: '25', name: 'Kappa', begin: 0, end: 5 }] },
+    { user: 'ComfyCorgi', text: 'Hope chat has the loveliest day!', emotes: [] },
+  ];
+  const wait = (milliseconds: number) => new Promise(resolve => setTimeout(resolve, milliseconds));
+
+  console.log('[demo] Open these pages to watch the automatic loop:');
+  console.log(`[demo] Packing overlay: http://localhost:${PORT}/overlay/pack`);
+  console.log(`[demo] Unbox overlay:   http://localhost:${PORT}/overlay/unbox`);
+  console.log(`[demo] Stream B scene:  http://localhost:${PORT}/scene/b`);
+
+  while (!stopping) {
+    const now = Date.now();
+    const endsAt = now + 18_000;
+    const pack: CarePackage = {
+      id: 'demo-loop', sourceUserId: 'demo-streamer-a', targetLogin: 'prashunok', targetName: 'Prashunok',
+      startedAt: now, endsAt, accepting: true, items: [], users: new Set(),
+    };
+    activePacking = pack;
+    carePackages.set(pack.targetLogin, pack);
+    sendOverlay('pack', { kind: 'pack_started', target: pack.targetName, endsAt, durationMs: 18_000 });
+    console.log('[demo] Packing window opened for Prashunok.');
+
+    for (const [index, item] of items.entries()) {
+      await wait(1100);
+      if (stopping) return;
+      pack.items.push(item);
+      pack.users.add(`demo-viewer-${index + 1}`);
+      sendOverlay('pack', { kind: 'pack_item', item, itemCount: pack.items.length });
+    }
+    await wait(Math.max(0, endsAt - Date.now()));
+    pack.accepting = false;
+    if (activePacking === pack) activePacking = undefined;
+    carePackages.delete(pack.targetLogin);
+    sendOverlay('pack', { kind: 'pack_ended', target: pack.targetName });
+    console.log('[demo] Package sealed; simulating the raid to Prashunok.');
+
+    await wait(1800);
+    latestUnboxMessage = {
+      kind: 'raid_arrival', packageFound: true, raider: 'osakamadagascar', viewers: 42,
+      target: 'Prashunok', items: pack.items,
+    };
+    lastPackageUnboxMessage = latestUnboxMessage;
+    latestUnboxAt = Date.now();
+    sendOverlay('unbox', latestUnboxMessage);
+    console.log('[demo] Sample raid arrived with six care package gifts.');
+
+    await wait(32_000);
+  }
+}
 
 function subscriptionSpecs(account: Account, token: TwitchToken): SubscriptionSpec[] {
   const specs: SubscriptionSpec[] = [{
@@ -748,7 +788,10 @@ overlayServer.on('connection', (socket, request) => {
   });
   socket.on('error', error => console.error(`[overlay:${view}] WebSocket error:`, error.message));
   if (view === 'pack' && activePacking?.accepting) {
-    sendToOverlayClient(view, socket, { kind: 'pack_started', target: activePacking.targetName, endsAt: activePacking.endsAt, durationMs: 90_000 });
+    sendToOverlayClient(view, socket, {
+      kind: 'pack_started', target: activePacking.targetName, endsAt: activePacking.endsAt,
+      durationMs: Math.max(0, activePacking.endsAt - activePacking.startedAt),
+    });
     activePacking.items.forEach((item, index) => sendToOverlayClient(view, socket, { kind: 'pack_item', item, itemCount: index + 1 }));
   } else if (view === 'unbox' && latestUnboxMessage && Date.now() - latestUnboxAt < 3 * 60_000) {
     sendToOverlayClient(view, socket, latestUnboxMessage);
@@ -757,10 +800,15 @@ overlayServer.on('connection', (socket, request) => {
 overlayServer.on('error', error => console.error('[overlay] WebSocket server error:', error.message));
 
 async function main(): Promise<void> {
-  await loadTokens();
-  for (const account of ['A', 'B'] as const) await ensureFreshToken(account);
-  httpServer.listen(PORT, 'localhost', () => console.log(`Raid Care Package listening at http://localhost:${PORT}`));
-  if (tokens.A || tokens.B) await startEventSub();
+  if (!DEMO_MODE) {
+    await loadTokens();
+    for (const account of ['A', 'B'] as const) await ensureFreshToken(account);
+  }
+  httpServer.listen(PORT, 'localhost', () => {
+    console.log(`Raid Care Package listening at http://localhost:${PORT}${DEMO_MODE ? ' (demo mode; Twitch disabled)' : ''}`);
+    if (DEMO_MODE) void runDemoLoop();
+    else if (tokens.A || tokens.B) void startEventSub();
+  });
 }
 
 function stopEventSub(): void {
