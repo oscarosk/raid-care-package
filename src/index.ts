@@ -56,14 +56,17 @@ type EventSubState = {
   reconnectTimer?: NodeJS.Timeout;
   subscriptionRetries: Map<string, { timer?: NodeJS.Timeout; spec: SubscriptionSpec; attempt: number }>;
 };
+type PendingOverlayDelivery = { view: 'pack' | 'unbox'; kind: string; awaiting: Set<WebSocket>; acknowledged: Set<WebSocket>; timer: NodeJS.Timeout };
 const tokens: TokenStore = {};
 const pendingStates = new Map<string, { account: Account; createdAt: number }>();
 const eventSubStates = new Map<Account, EventSubState>();
 const carePackages = new Map<string, CarePackage>();
 const seenEventIds = new Set<string>();
 const overlayClients = new Map<WebSocket, 'pack' | 'unbox'>();
+const pendingOverlayDeliveries = new Map<string, PendingOverlayDelivery>();
 let overlayServer: WebSocketServer | undefined;
 let latestUnboxMessage: Record<string, unknown> | undefined;
+let lastPackageUnboxMessage: Record<string, unknown> | undefined;
 let latestUnboxAt = 0;
 let activePacking: CarePackage | undefined;
 let chatSendQueue: Promise<void> = Promise.resolve();
@@ -201,11 +204,62 @@ app.get('/auth/callback', async (request, response) => {
   }
 });
 
-function sendOverlay(view: 'pack' | 'unbox', message: Record<string, unknown>): void {
-  const encoded = JSON.stringify(message);
-  for (const [socket, socketView] of overlayClients) {
-    if (socketView === view && socket.readyState === WebSocket.OPEN) socket.send(encoded);
+function overlayLabel(view: 'pack' | 'unbox'): { page: string; channel: Account } {
+  return view === 'pack' ? { page: '/overlay/pack', channel: 'A' } : { page: '/overlay/unbox', channel: 'B' };
+}
+
+function clearOverlayDelivery(deliveryId: string): void {
+  const delivery = pendingOverlayDeliveries.get(deliveryId);
+  if (delivery) clearTimeout(delivery.timer);
+  pendingOverlayDeliveries.delete(deliveryId);
+}
+
+function sendToOverlayClient(view: 'pack' | 'unbox', socket: WebSocket, message: Record<string, unknown>): void {
+  const deliveryId = randomBytes(8).toString('hex');
+  const kind = String(message.kind ?? 'event');
+  const label = overlayLabel(view);
+  const timer = setTimeout(() => {
+    const delivery = pendingOverlayDeliveries.get(deliveryId);
+    if (!delivery) return;
+    console.log(`[overlay] ${delivery.acknowledged.size}/${delivery.awaiting.size} clients rendered ${kind} on ${label.page} (channel ${label.channel})`);
+    clearOverlayDelivery(deliveryId);
+  }, 2000);
+  timer.unref();
+  pendingOverlayDeliveries.set(deliveryId, { view, kind, awaiting: new Set([socket]), acknowledged: new Set(), timer });
+  socket.send(JSON.stringify({ ...message, deliveryId }), error => {
+    if (error) console.error(`[overlay] Send failed for ${label.page}:`, error.message);
+  });
+  console.log(`[overlay] Sent ${kind} to 1 client on ${label.page} (channel ${label.channel})`);
+}
+
+function sendOverlay(view: 'pack' | 'unbox', message: Record<string, unknown>): number {
+  const clients = Array.from(overlayClients.entries())
+    .filter(([socket, socketView]) => socketView === view && socket.readyState === WebSocket.OPEN)
+    .map(([socket]) => socket);
+  const label = overlayLabel(view);
+  const kind = String(message.kind ?? 'event');
+  if (!clients.length) {
+    console.warn(`[overlay] Sent ${kind} to 0 clients on ${label.page} (channel ${label.channel})`);
+    return 0;
   }
+
+  const deliveryId = randomBytes(8).toString('hex');
+  const timer = setTimeout(() => {
+    const delivery = pendingOverlayDeliveries.get(deliveryId);
+    if (!delivery) return;
+    console.log(`[overlay] ${delivery.acknowledged.size}/${delivery.awaiting.size} clients rendered ${kind} on ${label.page} (channel ${label.channel})`);
+    clearOverlayDelivery(deliveryId);
+  }, 2000);
+  timer.unref();
+  pendingOverlayDeliveries.set(deliveryId, { view, kind, awaiting: new Set(clients), acknowledged: new Set(), timer });
+  const encoded = JSON.stringify({ ...message, deliveryId });
+  for (const socket of clients) {
+    socket.send(encoded, error => {
+      if (error) console.error(`[overlay] Send failed for ${label.page}:`, error.message);
+    });
+  }
+  console.log(`[overlay] Sent ${kind} to ${clients.length} client(s) on ${label.page} (channel ${label.channel})`);
+  return clients.length;
 }
 
 function sendAChatMessage(message: string): Promise<void> {
@@ -290,17 +344,22 @@ function openCarePackage(targetText: string): void {
   carePackages.set(targetLogin, pack);
   itemsSinceConfirmation = 0;
   sendOverlay('pack', { kind: 'pack_started', target: pack.targetName, endsAt: pack.endsAt, durationMs: 90_000 });
-  pack.endTimer = setTimeout(() => {
-    pack.accepting = false;
-    if (activePacking === pack) activePacking = undefined;
-    sendOverlay('pack', { kind: 'pack_ended', target: pack.targetName });
-  }, 90_000);
-  pack.endTimer.unref();
+  armPackWindowEnd(pack);
   pack.cleanupTimer = setTimeout(() => {
     if (carePackages.get(pack.targetLogin) === pack) carePackages.delete(pack.targetLogin);
   }, 10 * 60_000);
   pack.cleanupTimer.unref();
   void requestRaid(pack);
+}
+
+function armPackWindowEnd(pack: CarePackage): void {
+  if (pack.endTimer) clearTimeout(pack.endTimer);
+  pack.endTimer = setTimeout(() => {
+    pack.accepting = false;
+    if (activePacking === pack) activePacking = undefined;
+    sendOverlay('pack', { kind: 'pack_ended', target: pack.targetName });
+  }, Math.max(0, pack.endsAt - Date.now()));
+  pack.endTimer.unref();
 }
 
 function collectPackItem(event: Record<string, any>, text: string, textStart: number): void {
@@ -384,6 +443,7 @@ function handleRaidNotification(event: Record<string, any>): void {
       target: accountB?.display_name ?? pack.targetName,
       items: pack.items,
     };
+    lastPackageUnboxMessage = latestUnboxMessage;
   } else {
     latestUnboxMessage = { kind: 'raid_arrival', packageFound: false, raider, viewers, items: [] };
   }
@@ -391,6 +451,39 @@ function handleRaidNotification(event: Record<string, any>): void {
   sendOverlay('unbox', latestUnboxMessage);
   console.log(`[B] Raid arrived from ${raider} (${viewers} viewers), package ${pack ? 'found' : 'not found'}`);
 }
+
+app.get('/debug/replay-unbox', (_request, response) => {
+  if (!lastPackageUnboxMessage) return response.status(404).json({ ok: false, message: 'No care package has arrived in this server session yet.' });
+  const clients = sendOverlay('unbox', lastPackageUnboxMessage);
+  response.json({ ok: true, replayed: true, clients, packageFound: true });
+});
+
+app.get('/debug/demo-pack', (_request, response) => {
+  if (activePacking?.accepting) {
+    activePacking.accepting = false;
+    if (activePacking.endTimer) clearTimeout(activePacking.endTimer);
+    sendOverlay('pack', { kind: 'pack_ended', target: activePacking.targetName });
+  }
+  const now = Date.now();
+  const pack: CarePackage = {
+    id: 'debug-demo', sourceUserId: 'debug-demo', targetLogin: 'demo-community', targetName: 'Demo Community',
+    startedAt: now, endsAt: now + 90_000, accepting: true, items: [], users: new Set(),
+  };
+  activePacking = pack;
+  armPackWindowEnd(pack);
+  sendOverlay('pack', { kind: 'pack_started', target: pack.targetName, endsAt: pack.endsAt, durationMs: 90_000 });
+  const demoItems: PackageItem[] = [
+    { user: 'MapleMoth', text: 'A pocket-sized good luck for the road!', emotes: [] },
+    { user: 'Cloudberry', text: 'PogChamp energy for your next adventure', emotes: [{ id: '88', name: 'PogChamp', begin: 0, end: 8 }] },
+    { user: 'PixelFern', text: 'You made this little corner of Twitch feel like home.', emotes: [] },
+  ];
+  for (const item of demoItems) {
+    pack.items.push(item);
+    pack.users.add(item.user);
+    sendOverlay('pack', { kind: 'pack_item', item, itemCount: pack.items.length });
+  }
+  response.json({ ok: true, itemCount: demoItems.length, countdownSeconds: 90 });
+});
 
 function subscriptionSpecs(account: Account, token: TwitchToken): SubscriptionSpec[] {
   const specs: SubscriptionSpec[] = [{
@@ -494,9 +587,9 @@ function connectAccountEventSub(
     if (state.heartbeat) clearTimeout(state.heartbeat);
     state.heartbeat = setTimeout(() => {
       if (state.socket !== socket) return;
-      console.warn(`[${account}] EventSub keepalive timeout after ${seconds}s; terminating socket`);
+      console.warn(`[${account}] EventSub silence exceeded keepalive timeout (${seconds}s) plus 10s grace; terminating socket`);
       socket.terminate();
-    }, (seconds + 2) * 1000);
+    }, (seconds + 10) * 1000);
   };
   socket.on('open', () => console.log(`[${account}] EventSub WebSocket connected`));
   socket.on('message', (raw: WebSocket.RawData) => {
@@ -612,17 +705,40 @@ overlayServer.on('connection', (socket, request) => {
   const requestUrl = new URL(request.url ?? '/', 'http://localhost');
   const view = requestUrl.searchParams.get('view');
   if (view !== 'pack' && view !== 'unbox') {
+    console.warn(`[overlay] Rejected WebSocket connection with unknown page: ${request.url ?? '(empty URL)'}`);
     socket.close(1008, 'Unknown overlay view');
     return;
   }
   overlayClients.set(socket, view);
-  socket.on('close', () => overlayClients.delete(socket));
+  const label = overlayLabel(view);
+  const connectedCount = Array.from(overlayClients.values()).filter(clientView => clientView === view).length;
+  console.log(`[overlay] ${label.page} connected for channel ${label.channel}; ${connectedCount} client(s)`);
+  socket.on('message', raw => {
+    try {
+      const message = JSON.parse(raw.toString()) as { kind?: string; deliveryId?: string };
+      if (message.kind !== 'overlay_ack' || !message.deliveryId) return;
+      const delivery = pendingOverlayDeliveries.get(message.deliveryId);
+      if (!delivery || delivery.view !== view || !delivery.awaiting.has(socket)) return;
+      delivery.acknowledged.add(socket);
+      if (delivery.acknowledged.size === delivery.awaiting.size) {
+        console.log(`[overlay] ${delivery.acknowledged.size}/${delivery.awaiting.size} clients rendered ${delivery.kind} on ${label.page} (channel ${label.channel})`);
+        clearOverlayDelivery(message.deliveryId);
+      }
+    } catch (error) {
+      console.error(`[overlay] Invalid message from ${label.page}:`, error);
+    }
+  });
+  socket.on('close', () => {
+    overlayClients.delete(socket);
+    const remaining = Array.from(overlayClients.values()).filter(clientView => clientView === view).length;
+    console.log(`[overlay] ${label.page} disconnected from channel ${label.channel}; ${remaining} client(s) remain`);
+  });
   socket.on('error', error => console.error(`[overlay:${view}] WebSocket error:`, error.message));
   if (view === 'pack' && activePacking?.accepting) {
-    socket.send(JSON.stringify({ kind: 'pack_started', target: activePacking.targetName, endsAt: activePacking.endsAt, durationMs: 90_000 }));
-    activePacking.items.forEach((item, index) => socket.send(JSON.stringify({ kind: 'pack_item', item, itemCount: index + 1 })));
+    sendToOverlayClient(view, socket, { kind: 'pack_started', target: activePacking.targetName, endsAt: activePacking.endsAt, durationMs: 90_000 });
+    activePacking.items.forEach((item, index) => sendToOverlayClient(view, socket, { kind: 'pack_item', item, itemCount: index + 1 }));
   } else if (view === 'unbox' && latestUnboxMessage && Date.now() - latestUnboxAt < 3 * 60_000) {
-    socket.send(JSON.stringify(latestUnboxMessage));
+    sendToOverlayClient(view, socket, latestUnboxMessage);
   }
 });
 overlayServer.on('error', error => console.error('[overlay] WebSocket server error:', error.message));
@@ -630,7 +746,7 @@ overlayServer.on('error', error => console.error('[overlay] WebSocket server err
 async function main(): Promise<void> {
   await loadTokens();
   for (const account of ['A', 'B'] as const) await ensureFreshToken(account);
-  httpServer.listen(PORT, () => console.log(`Raid Care Package listening at http://localhost:${PORT}`));
+  httpServer.listen(PORT, 'localhost', () => console.log(`Raid Care Package listening at http://localhost:${PORT}`));
   if (tokens.A || tokens.B) await startEventSub();
 }
 

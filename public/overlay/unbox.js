@@ -10,6 +10,8 @@
   let socket;
   let retryTimer;
   let revealTimers = [];
+  let welcomeTimer;
+  let retryDelay = 1000;
 
   function renderMessage(container, item) {
     const text = String(item.text ?? '');
@@ -60,6 +62,7 @@
   function showArrival(message) {
     for (const timer of revealTimers) clearTimeout(timer);
     revealTimers = [];
+    clearTimeout(welcomeTimer);
     revealList.replaceChildren();
     welcomeCard.hidden = true;
     replayAnimation();
@@ -78,27 +81,55 @@
       revealTimers.push(setTimeout(() => {
         revealList.append(makeItem(item, index));
         revealList.scrollTo({ top: revealList.scrollHeight, behavior: 'smooth' });
-      }, revealStart + index * 1750));
+      }, revealStart + index * 3000));
     });
-    const welcomeAt = revealStart + Math.max(items.length, 1) * 1750 + 550;
+    const welcomeAt = revealStart + (hasPackage ? items.length * 3000 : 0) + 500;
     revealTimers.push(setTimeout(() => {
       welcomeTitle.textContent = `Welcome, ${raider}'s community!`;
       welcomeDetail.textContent = `${viewers.toLocaleString()} raiders · one big welcome`;
       welcomeCard.hidden = false;
+      console.info('[overlay:unbox] welcome card shown');
+      welcomeTimer = setTimeout(() => {
+        welcomeCard.hidden = true;
+        revealList.replaceChildren();
+        stage.classList.remove('is-playing', 'is-open', 'is-generic');
+        title.textContent = "Something's on the way";
+        subtitle.textContent = 'Good things travel together.';
+        console.info('[overlay:unbox] presentation cleared after 8 seconds');
+      }, 8000);
     }, welcomeAt));
+    console.info(`[overlay:unbox] rendering raid_arrival: package=${hasPackage}, items=${items.length}, raider=${raider}`);
+    return true;
   }
 
   function connect() {
     clearTimeout(retryTimer);
     const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    socket = new WebSocket(`${scheme}//${location.host}/ws?view=unbox`);
+    const url = `${scheme}//${location.host}/ws?view=unbox`;
+    console.info(`[overlay:unbox] connecting to ${url}`);
+    socket = new WebSocket(url);
+    socket.onopen = () => {
+      retryDelay = 1000;
+      console.info('[overlay:unbox] connected');
+    };
     socket.onmessage = event => {
       try {
         const message = JSON.parse(event.data);
-        if (message.kind === 'raid_arrival') showArrival(message);
-      } catch (error) { console.error('Invalid unbox overlay message', error); }
+        console.info(`[overlay:unbox] received ${message.kind}`);
+        if (message.kind === 'raid_arrival' && showArrival(message) && message.deliveryId) {
+          socket.send(JSON.stringify({ kind: 'overlay_ack', deliveryId: message.deliveryId }));
+          console.info('[overlay:unbox] rendered raid_arrival');
+        } else if (message.kind !== 'raid_arrival') {
+          console.warn(`[overlay:unbox] ignored unexpected event ${message.kind}`);
+        }
+      } catch (error) { console.error('[overlay:unbox] error handling server message', error); }
     };
-    socket.onclose = () => { retryTimer = setTimeout(connect, 1200); };
+    socket.onclose = event => {
+      console.warn(`[overlay:unbox] disconnected (${event.code}: ${event.reason || 'no reason'}); reconnecting in ${retryDelay}ms`);
+      const delay = retryDelay;
+      retryDelay = Math.min(15000, retryDelay * 2);
+      retryTimer = setTimeout(connect, delay);
+    };
     socket.onerror = () => socket.close();
   }
 

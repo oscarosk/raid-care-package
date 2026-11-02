@@ -9,6 +9,7 @@
   let total = 0;
   let socket;
   let retryTimer;
+  let retryDelay = 1000;
 
   function renderMessage(container, item) {
     const text = String(item.text ?? '');
@@ -58,32 +59,52 @@
       title.textContent = 'A little love goes a long way';
       target.textContent = `Packing for ${message.target}`;
       status.innerHTML = 'Chat, add a note with <b>!pack your message</b>';
-      return;
+      return true;
     }
     if (message.kind === 'pack_item') {
       total = Number(message.itemCount ?? total + 1);
       itemCount.textContent = String(total);
       addItem(message.item ?? {});
-      return;
+      return true;
     }
     if (message.kind === 'pack_target_resolved') {
       target.textContent = `Packing for ${message.target}`;
-      return;
+      return true;
     }
     if (message.kind === 'pack_ended') {
       endsAt = 0;
       status.textContent = 'Package packed — waiting for the raid';
+      return true;
     }
+    return false;
   }
 
   function connect() {
     clearTimeout(retryTimer);
     const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    socket = new WebSocket(`${scheme}//${location.host}/ws?view=pack`);
-    socket.onmessage = event => {
-      try { handle(JSON.parse(event.data)); } catch (error) { console.error('Invalid pack overlay message', error); }
+    const url = `${scheme}//${location.host}/ws?view=pack`;
+    console.info(`[overlay:pack] connecting to ${url}`);
+    socket = new WebSocket(url);
+    socket.onopen = () => {
+      retryDelay = 1000;
+      console.info('[overlay:pack] connected');
     };
-    socket.onclose = () => { retryTimer = setTimeout(connect, 1200); };
+    socket.onmessage = event => {
+      try {
+        const message = JSON.parse(event.data);
+        console.info(`[overlay:pack] received ${message.kind}`);
+        if (handle(message) && message.deliveryId) {
+          socket.send(JSON.stringify({ kind: 'overlay_ack', deliveryId: message.deliveryId }));
+          console.info(`[overlay:pack] rendered ${message.kind}`);
+        }
+      } catch (error) { console.error('[overlay:pack] error handling server message', error); }
+    };
+    socket.onclose = event => {
+      console.warn(`[overlay:pack] disconnected (${event.code}: ${event.reason || 'no reason'}); reconnecting in ${retryDelay}ms`);
+      const delay = retryDelay;
+      retryDelay = Math.min(15000, retryDelay * 2);
+      retryTimer = setTimeout(connect, delay);
+    };
     socket.onerror = () => socket.close();
   }
 
