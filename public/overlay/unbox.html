@@ -14,11 +14,17 @@
       <p id="unbox-subtitle">Good things travel together.</p>
     </div>
     <div class="unbox-scene">
-      <div class="gift-box" id="unbox-box" aria-hidden="true">
-        <div class="gift-lid"></div><div class="gift-front"></div><div class="gift-ribbon"></div>
-        <span class="gift-spark">✦</span>
+      <div class="box-stage" id="box-stage" aria-hidden="true">
+        <div class="gift-box" id="unbox-box">
+          <div class="gift-lid"></div><div class="gift-front"></div><div class="gift-ribbon"></div>
+          <span class="gift-spark">✦</span>
+        </div>
       </div>
       <div class="reveal-list" id="reveal-list"></div>
+    </div>
+    <div class="community-finale" id="community-finale" hidden>
+      <strong id="finale-title"></strong>
+      <span id="finale-users"></span>
     </div>
     <div class="welcome-card" id="welcome-card" hidden>
       <span class="welcome-star">✦</span>
@@ -26,6 +32,9 @@
       <strong id="welcome-title">Welcome, friends!</strong>
       <span id="welcome-detail"></span>
     </div>
+    <div class="burst-flash" aria-hidden="true"></div>
+    <div class="light-rays" aria-hidden="true"></div>
+    <div class="confetti-field" id="confetti-field" aria-hidden="true"></div>
   </main>
   <script src="/overlay/unbox.js" defer></script>
 </body>

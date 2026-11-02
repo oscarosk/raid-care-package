@@ -454,9 +454,21 @@ function handleRaidNotification(event: Record<string, any>): void {
 }
 
 app.get('/debug/replay-unbox', (_request, response) => {
-  if (!lastPackageUnboxMessage) return response.status(404).json({ ok: false, message: 'No care package has arrived in this server session yet.' });
-  const clients = sendOverlay('unbox', lastPackageUnboxMessage);
-  response.json({ ok: true, replayed: true, clients, packageFound: true });
+  const sampleItems = [
+    { user: 'MoonlitMia', text: 'Kappa', emotes: [{ id: '25', name: 'Kappa', begin: 0, end: 5 }] },
+    { user: 'ComfyCorgi', text: 'The coziest raid energy!' },
+    { user: 'TeaAndPixels', text: 'Hope chat has a lovely day' },
+    { user: 'StarryNights', text: 'PogChamp', emotes: [{ id: '88', name: 'PogChamp', begin: 0, end: 8 }] },
+    { user: 'PixelPanda', text: 'Sending good vibes and snacks' },
+    { user: 'Cloudberry', text: 'You have the sweetest community!' },
+  ];
+  const replayMessage = lastPackageUnboxMessage ?? {
+    kind: 'raid_arrival', packageFound: true, raider: 'Demo Raiding Friend', viewers: 42,
+    target: 'Demo Community', items: sampleItems,
+  };
+  const clients = sendOverlay('unbox', replayMessage);
+  const itemCount = Array.isArray(replayMessage.items) ? replayMessage.items.length : 0;
+  response.json({ ok: true, replayed: true, clients, packageFound: true, items: itemCount, sample: !lastPackageUnboxMessage });
 });
 
 app.get('/debug/demo-pack', (_request, response) => {
